@@ -1,4 +1,0 @@
-EXPERIMENT OUTPUT:
-
-Sensor Number: 100
-

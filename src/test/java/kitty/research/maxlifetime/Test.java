@@ -4,6 +4,7 @@ import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.ops.impl.indexaccum.IMax;
 import org.nd4j.linalg.api.ops.impl.indexaccum.IMin;
 import org.nd4j.linalg.factory.Nd4j;
+import org.nd4j.linalg.indexing.NDArrayIndex;
 import org.nd4j.linalg.ops.transforms.Transforms;
 
 import kitty.research.maxlifetime.algorithm.SimplexSolver;
@@ -38,7 +39,9 @@ public class Test {
 //		System.out.println(min);
 //		var result = Transforms.greaterThanOrEqual(b, c, true);
 //		result.muli(2).subi(1);
-		System.out.println("Final Result: " + spl.independentRowList(A));
+		var A1 = A.getRow(1);
+		var A2 = A1.reshape(5, 1);
+		System.out.println(A2.isView());
 		long end = System.currentTimeMillis();
 //		System.out.println(end - start);
 	}

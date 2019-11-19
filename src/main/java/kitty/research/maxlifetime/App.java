@@ -59,6 +59,7 @@ public class App
 				System.out.println("        Configuration Time: " + (mid3 - mid2));
 				var spl = new SimplexSolverDouble();
 				double result = -spl.execute(A, b, c);
+				A.close(); b.close(); c.close();
 				long end = System.currentTimeMillis();
 				System.out.println("        Time: " + (end - mid2) + "\n        Result: " + result);
 				results[field] = result;

@@ -392,20 +392,6 @@ public class SimplexSolverDouble {
 				}
 
 			}
-//			for (int i = tempPosition + 1; i < columnNumber; i++) {
-//				int tempZeros = 0;
-//				for (int j = tempPivot; j < rowNumber; j++) {
-//					if (A1.getDouble(j, i) == 0) {
-//						tempZeros++;
-//					} else {
-//						break;
-//					}
-//				}
-//				if (tempZeros < tempMin) {
-//					tempMin = tempZeros;
-//					tempMinIndex = i;
-//				}
-//			}	
 			if (tempMinIndex != tempPosition + 1) {
 				var temp = A1.getColumn(tempPosition + 1).dup();
 				A1.putColumn(tempPosition + 1, A1.getColumn(tempMinIndex));

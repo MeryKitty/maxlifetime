@@ -2,6 +2,7 @@ package kitty.research.maxlifetime.algorithm;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -22,6 +23,7 @@ import kitty.research.maxlifetime.model.SensorNetwork;
 public class Graph {
 	private final List<Cluster> clusterList;
 	private final Map<Edge, Integer> edgeMap;
+	private final List<Edge> edgeList;
 	private final Vertex startVer, endVer;
 
 	/**
@@ -32,7 +34,8 @@ public class Graph {
 	public Graph(SensorNetwork network) {
 		int sensorNumber = network.sensorList().size();
 		int edgeNumber = network.countOverlaps();
-		this.edgeMap = new HashMap<Edge, Integer>((int)(edgeNumber * 1.5));
+		this.edgeMap = new HashMap<Edge, Integer>(edgeNumber * 3 / 2);
+		this.edgeList = new ArrayList<>(edgeNumber);
 		this.clusterList = new ArrayList<Cluster>(sensorNumber + 1);
 		this.startVer = new Vertex();
 		this.endVer = new Vertex();
@@ -62,27 +65,32 @@ public class Graph {
 			Vertex current = sectorVertexMap.get(s);
 			Edge temp = new Edge(this.startVer, current);
 			edgeMap.put(temp, i[0]++);
-			current.in().add(temp);
-			this.startVer.out().add(temp);
+			edgeList.add(temp);
+			current.in().put(this.startVer, temp);
+			this.startVer.out().put(current, temp);
 		}
 		// Add the edges go to the end edges
 		for (Sector s : rightOverlap) {
 			Vertex current = sectorVertexMap.get(s);
 			Edge temp = new Edge(current, this.endVer);
 			edgeMap.put(temp, i[0]++);
-			current.out().add(temp);
-			this.endVer.in().add(temp);
+			edgeList.add(temp);
+			current.out().put(this.endVer, temp);
+			this.endVer.in().put(current, temp);
 		}
 		// Add the edges between any pair of connected vertices, note that (A, B)
 		// and (B, A) are different
 		network.iterateSectors((Sector s) -> {
 			Vertex current = sectorVertexMap.get(s);
 			for (Sector s1 : s.intersectedSectors()) {
-				Vertex current1 = sectorVertexMap.get(s1);
-				Edge temp = new Edge(current, current1);
-				edgeMap.put(temp, i[0]++);
-				current.out().add(temp);
-				current1.in().add(temp);
+				if (s.centre().x() < s1.centre().x()) {
+					Vertex current1 = sectorVertexMap.get(s1);
+					Edge temp = new Edge(current, current1);
+					edgeMap.put(temp, i[0]++);
+					edgeList.add(temp);
+					current.out().put(current1, temp);
+					current1.in().put(current, temp);
+				}
 			}
 		});
 	}
@@ -165,11 +173,11 @@ public class Graph {
 		// For each vertex, the in edge has weight of 1 while the out edge has weight of 0
 		// The RHS constraint is always zero
 		this.iterateVertices((Vertex current) -> {
-			for (var e : current.in()) {
+			for (var e : current.in().values()) {
 				int column = edgeMap.get(e);
 				A.getScalar(i[0], column).assign(1);
 			}
-			for (var e : current.out()) {
+			for (var e : current.out().values()) {
 				int column = edgeMap.get(e);
 				A.getScalar(i[0], column).assign(-1);
 			}
@@ -184,7 +192,7 @@ public class Graph {
 			int row = j + vertexNumber;
 			var current = this.clusterList.get(j);
 			for (var ver : current.vertices()) {
-				for (var e : ver.in()) {
+				for (var e : ver.in().values()) {
 					int column = edgeMap.get(e);
 					A.getScalar(row, column).assign(1);
 				}
@@ -203,7 +211,7 @@ public class Graph {
 		
 		// Initialise the target matrix, which is the sum of all edges go in to the end vertex
 		// of the graph
-		for (Edge e : this.endVer.in()) {
+		for (Edge e : this.endVer.in().values()) {
 			int column = edgeMap.get(e);
 			c.getScalar(column).assign(1);
 		}
@@ -212,5 +220,83 @@ public class Graph {
 		if (edgeMap.size() + this.clusterList.size() != c.columns()) {
 			throw new AssertionError();
 		}
+	}
+	
+	public int analyseIntFlow(double[] vertex) {
+		// initialise the flow network
+		for (int i = 0; i < this.edgeList.size(); i++) {
+			this.edgeList.get(i).setCapacity(vertex[i]);
+		}
+		//
+		int intFlow = 0;
+		while (true) {
+			var path = this.shortestIntPath();
+			if (path == null) {
+				break;
+			}
+			int tempFlow = this.intFlowPush(path);
+			intFlow += tempFlow;
+		}
+		return intFlow;
+	}
+	
+	private List<Vertex> shortestIntPath() {
+		var next = new HashMap<Vertex, Vertex>();
+		var passed = new HashSet<Vertex>();
+		var current = new HashSet<Vertex>();
+		passed.add(this.endVer);
+		current.add(this.endVer);
+		outerLoop:
+			while (!current.isEmpty()) {
+				var temp = new HashSet<Vertex>();
+				for (var ver : current) {
+					for (var exam : ver.in().entrySet()) {
+						if (exam.getValue().capacity() >= 1 - 1E-9 && !passed.contains(exam.getKey())) {
+							if (temp.add(exam.getKey())) {
+								next.put(exam.getKey(), ver);
+								if (exam.getKey().equals(this.startVer)) {
+									break outerLoop;
+								}
+							}
+						}
+					}
+				}
+				current = temp;
+				passed.addAll(current);
+			}
+		if (next.containsKey(this.startVer)) {
+			var tempVertex = this.startVer;
+			var result = new ArrayList<Vertex>();
+			while (tempVertex != null) {
+				result.add(tempVertex);
+				tempVertex = next.get(tempVertex);
+			}
+			return result;
+		} else {
+			return null;
+		}
+	}
+	
+	private int intFlowPush(List<Vertex> path) {
+		int flow = Integer.MAX_VALUE;
+		for (int i = 0; i < path.size() - 1; i++) {
+			var tempEdge = path.get(i).out().get(path.get(i + 1));
+			if (tempEdge.capacity() < flow - 1E-9) {
+				flow = (int) (tempEdge.capacity() + 1E-9);
+			}
+		}
+		for (int i = 0; i < path.size() - 1; i++) {
+			var start = path.get(i); var end = path.get(i + 1);
+			var tempEdge = start.out().get(end);
+			tempEdge.setCapacity(tempEdge.capacity() - flow);
+			var reverseEdge = end.out().get(start);
+			if (reverseEdge == null) {
+				reverseEdge = new Edge(end, start);
+				end.out().put(start, reverseEdge);
+				start.in().put(end, reverseEdge);
+			}
+			reverseEdge.setCapacity(reverseEdge.capacity() + flow);
+		}
+		return flow;
 	}
 }

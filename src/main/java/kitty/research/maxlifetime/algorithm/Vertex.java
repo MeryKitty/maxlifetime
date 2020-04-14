@@ -1,7 +1,7 @@
 package kitty.research.maxlifetime.algorithm;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * A vertex represents a sector of a certain sensor in the network
@@ -10,11 +10,11 @@ import java.util.Set;
  *
  */
 public class Vertex {
-	private final Set<Edge> in, out;
+	private final Map<Vertex, Edge> in, out;
 	
 	public Vertex() {
-		this.in = new HashSet<Edge>();
-		this.out = new HashSet<Edge>();
+		this.in = new HashMap<Vertex, Edge>();
+		this.out = new HashMap<Vertex, Edge>();
 	}
 	
 	/**
@@ -22,7 +22,7 @@ public class Vertex {
 	 * 
 	 * @return
 	 */
-	public Set<Edge> in() {
+	public Map<Vertex, Edge> in() {
 		return this.in;
 	}
 	
@@ -31,7 +31,7 @@ public class Vertex {
 	 * 
 	 * @return
 	 */
-	public Set<Edge> out() {
+	public Map<Vertex, Edge> out() {
 		return this.out;
 	}
 }

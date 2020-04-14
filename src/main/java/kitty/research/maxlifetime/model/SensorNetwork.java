@@ -91,8 +91,8 @@ public class SensorNetwork {
 			double x = Double.parseDouble(temp[0]);
 			double y = Double.parseDouble(temp[1]);
 			double r = Double.parseDouble(temp[2]);
-			double alpha = Math.toRadians(Double.parseDouble(temp[4]));
-			double lt = Double.parseDouble(temp[3]);
+			double alpha = Math.toRadians(Double.parseDouble(temp[3]));
+			double lt = Double.parseDouble(temp[4]);
 			Sensor cur = new Sensor(x, y, r, alpha, lt);
 			result.sensorList.add(cur);
 			temp = input.get(i * 2 + 2).split(" ");

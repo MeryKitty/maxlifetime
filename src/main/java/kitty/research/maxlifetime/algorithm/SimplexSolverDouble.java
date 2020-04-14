@@ -11,7 +11,10 @@ import org.nd4j.linalg.api.ops.impl.indexaccum.IMax;
 import org.nd4j.linalg.api.ops.impl.indexaccum.IMin;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.indexing.NDArrayIndex;
+import org.nd4j.linalg.inverse.InvertMatrix;
 import org.nd4j.linalg.ops.transforms.Transforms;
+
+import kitty.research.maxlifetime.basics.Pair;
 
 /**
  * Conduct the algorithm with double accuracy, bad for performance but there
@@ -107,7 +110,7 @@ public class SimplexSolverDouble {
 	 * @param c the target matrix, which is a {@code 1 x n} matrix
 	 * @return the minimum value of the target function
 	 */
-	public double execute(INDArray A, INDArray b, INDArray c) {
+	public Pair<Double, double[]> execute(INDArray A, INDArray b, INDArray c) {
 		long start = System.currentTimeMillis();
 		// Extract the list of independent row vector using echelon transformation
 		// The list obtained is the list of indices of A that correspond to the row
@@ -150,10 +153,18 @@ public class SimplexSolverDouble {
 		System.out.println("            Total Time: " + (mid2 - mid1) + "\n    Computation:");
 		// Conduct the simplex algorithm with found starting state
 		var result = this.execute1(startInfo, c);
+		double[] vertex = this.returnVertex(columnNumber, startInfo.B(), startInfo.x());
+		double tempResult = 0;
+		for (int i = 0; i < columnNumber; i++) {
+			tempResult += vertex[i] * c.getDouble(i);
+		}
+		if (Math.abs(tempResult - result) > this.tolerance) {
+			throw new AssertionError();
+		}
 		long end = System.currentTimeMillis();
 		System.out.println("            Total Time: " + (end - mid2));
 		startInfo.close();
-		return result;
+		return new Pair<>(result, vertex);
 	}
 	
 	/**
@@ -205,16 +216,16 @@ public class SimplexSolverDouble {
 				if (x.getDouble(i) >= this.tolerance) {
 					throw new UnsupportedOperationException("The valid region is empty!");
 				}
-				// If the corresponding coordinate x is zero, then we only need to rotate the simplex to
+				// If the corresponding coordinate x is zero, then we only need to pivot the simplex to
 				// eliminate the appearance of unwanted basis without changing the current value of d
 				else {
 					for (int j = 0; j < columnNumber; j++) {
 						double temp = A.getDouble(i, j);
 						if (temp >= this.tolerance || temp <= -this.tolerance) {
-							var rotateRow = A.getRow(i).dup().reshape(1, columnNumber + rowNumber);
-							var rotateColumn = A.getColumn(j).dup().reshape(rowNumber, 1);
-							phase1 = this.rotate(A, B, x, phase1, null, i, j, rotateRow, rotateColumn);
-							this.close(rotateRow); this.close(rotateColumn);
+							var pivotRow = A.getRow(i).dup().reshape(1, columnNumber + rowNumber);
+							var pivotColumn = A.getColumn(j).dup().reshape(rowNumber, 1);
+							phase1 = this.pivot(A, B, x, phase1, null, i, j, pivotRow, pivotColumn);
+							this.close(pivotRow); this.close(pivotColumn);
 							break;
 						}
 					}
@@ -268,34 +279,34 @@ public class SimplexSolverDouble {
 		long step1 = 0, step2 = 0;
 		while (true) {
 			long tempStart = System.currentTimeMillis();
-			// Get rotate column
-			int rotateColumnIndex = Nd4j.getExecutioner().execAndReturn(new IMax(delta)).getFinalResult().intValue();
-			if (delta.getDouble(rotateColumnIndex) < this.tolerance) {
+			// Get pivot column
+			int pivotColumnIndex = Nd4j.getExecutioner().execAndReturn(new IMax(delta)).getFinalResult().intValue();
+			if (delta.getDouble(pivotColumnIndex) < this.tolerance) {
 				break;
 			}
-			var rotateColumn = A.getColumn(rotateColumnIndex).dup().reshape(rowNumber, 1);
-			temp = rotateColumn.sub(this.tolerance);
+			var pivotColumn = A.getColumn(pivotColumnIndex).dup().reshape(rowNumber, 1);
+			temp = pivotColumn.sub(this.tolerance);
 			var temp2 = Transforms.relu(temp, true);
 			temp2.divi(temp);
 			this.close(temp);
-			temp = rotateColumn.mul(temp2);
-			// Get the theta corresponding to the rotateColumn
+			temp = pivotColumn.mul(temp2);
+			// Get the theta corresponding to the pivotColumn
 			var theta = x.div(temp);
 			Transforms.abs(theta, false);	// Eliminate potential -Infinity
 			this.close(temp); this.close(temp2);
-			// Get rotate row
-			int rotateRowIndex = Nd4j.getExecutioner().execAndReturn(new IMin(theta)).getFinalResult().intValue();
-			if (!Double.isFinite(theta.getDouble(rotateRowIndex, 0))) {
+			// Get pivot row
+			int pivotRowIndex = Nd4j.getExecutioner().execAndReturn(new IMin(theta)).getFinalResult().intValue();
+			if (!Double.isFinite(theta.getDouble(pivotRowIndex, 0))) {
 				f = Double.NEGATIVE_INFINITY;
 				break;
 			}
-			var rotateRow = A.getRow(rotateRowIndex).dup().reshape(1, columnNumber);
+			var pivotRow = A.getRow(pivotRowIndex).dup().reshape(1, columnNumber);
 			
 			long tempMid = System.currentTimeMillis();
-			// Rotate the tableau
-			f = this.rotate(A, B, x, f, delta, rotateRowIndex, rotateColumnIndex, rotateRow, rotateColumn);
+			// pivot the tableau
+			f = this.pivot(A, B, x, f, delta, pivotRowIndex, pivotColumnIndex, pivotRow, pivotColumn);
 
-			this.close(rotateRow); this.close(rotateColumn); this.close(theta);
+			this.close(pivotRow); this.close(pivotColumn); this.close(theta);
 			long tempEnd = System.currentTimeMillis();
 			step1 += tempMid - tempStart;
 			step2 += tempEnd - tempMid;
@@ -308,43 +319,111 @@ public class SimplexSolverDouble {
 	}
 	
 	/**
-	 * Rotate the simplex tableau at the given rotate column and rotate row
+	 * pivot the simplex tableau at the given pivot column and pivot row
 	 * 
 	 * @param A The current constraint matrix
 	 * @param B The current basis of the simplex space
 	 * @param x The current vertex of the simplex denoted through the basis
 	 * @param f The current target function value
 	 * @param delta The current delta
-	 * @param rotateRowIndex
-	 * @param rotateColumnIndex
-	 * @param rotateRow
-	 * @param rotateColumn
+	 * @param pivotRowIndex
+	 * @param pivotColumnIndex
+	 * @param pivotRow
+	 * @param pivotColumn
 	 * @return the new target function value correspond to the new vertex of the simplex
 	 */
-	private final double rotate(INDArray A, int[] B, INDArray x, double f, INDArray delta, int rotateRowIndex, int rotateColumnIndex, INDArray rotateRow, INDArray rotateColumn) {
+	private final double pivot(INDArray A, int[] B, INDArray x, double f, INDArray delta, int pivotRowIndex, int pivotColumnIndex, INDArray pivotRow, INDArray pivotColumn) {
 		// Get main element of the rotation
-		double mainEle = A.getDouble(rotateRowIndex, rotateColumnIndex);
-		// Update rotate row
-		rotateRow.divi(mainEle);
+		double mainEle = A.getDouble(pivotRowIndex, pivotColumnIndex);
+		// Update pivot row
+		pivotRow.divi(mainEle);
 		// Update the remaining rows
-		var updateA = rotateColumn.mmul(rotateRow);
+		var updateA = pivotColumn.mmul(pivotRow);
 		A.subi(updateA);
-		A.putRow(rotateRowIndex, rotateRow);
+		A.putRow(pivotRowIndex, pivotRow);
 		this.close(updateA);
 		// Update x
-		double xPivot = x.getDouble(rotateRowIndex, 0) / mainEle;
-		x.subi(rotateColumn.muli(xPivot));
-		x.putScalar(rotateRowIndex, xPivot);
+		double xPivot = x.getDouble(pivotRowIndex, 0) / mainEle;
+		x.subi(pivotColumn.muli(xPivot));
+		x.putScalar(pivotRowIndex, xPivot);
 		// Update B
-		B[rotateRowIndex] = rotateColumnIndex;
+		B[pivotRowIndex] = pivotColumnIndex;
 		// Update target function
 		// Update delta
 		if (delta != null) {
-			double deltaPivot = delta.getDouble(rotateColumnIndex);
-			delta.subi(rotateRow.muli(deltaPivot));
+			double deltaPivot = delta.getDouble(pivotColumnIndex);
+			delta.subi(pivotRow.muli(deltaPivot));
 			f -= xPivot * deltaPivot;
 		}
 		return f;
+	}
+	
+	@SuppressWarnings("unused")
+	private double quickExecute1(INDArray A, int[] B, INDArray b, INDArray c) {
+		return 0;
+	}
+	
+	@SuppressWarnings("unused")
+	private int quickTraverse(INDArray A, int[] B, INDArray b, INDArray c) {
+		int rowNumber = A.rows();
+		int columnNumber = A.columns();
+		if (B.length != rowNumber || b.rows() != rowNumber || c.columns() != columnNumber) {
+			throw new AssertionError();
+		}
+		var AB = A.getColumns(B);
+		var cB = c.getColumns(B);
+		var AB1 = InvertMatrix.invert(AB, false);
+		var x = AB1.mmul(b);
+		var temp = cB.mmul(AB1);
+		var z = temp.mmul(A);
+		this.close(temp); this.close(AB); this.close(cB); this.close(AB1);
+		z.subi(c);
+		var zArray = z.toDoubleVector();
+		var zSort = Nd4j.sortWithIndices(z, 1, false);
+		var zSortIndex = zSort[0].toIntVector();
+		this.close(zSort[0]); this.close(zSort[1]); this.close(z);
+		int pivots = 0;
+		int passedColumns = 0;
+		INDArray tempX = null;
+		while (true) {
+			int pivotColumnIndex = zSortIndex[passedColumns];
+			if (zArray[pivotColumnIndex] < -this.tolerance) {
+				break;
+			}
+			var pivotColumn = A.get(NDArrayIndex.interval(0, rowNumber - pivots), NDArrayIndex.point(pivotColumnIndex));
+			tempX = x.get(NDArrayIndex.interval(0, columnNumber - pivots), NDArrayIndex.point(0));
+			// Calculate theta vector
+			temp = pivotColumn.sub(this.tolerance);
+			var temp2 = Transforms.relu(temp, true);
+			temp2.divi(temp);
+			this.close(temp);
+			temp = pivotColumn.mul(temp2);
+			var theta = tempX.div(temp);
+			Transforms.abs(theta, false);	// Eliminate potential -Infinity
+			this.close(temp); this.close(temp2);
+			temp = Nd4j.argMin(theta, 0);
+			int pivotRowIndex = temp.getInt(0);
+			this.close(temp);
+			this.close(tempX);
+			passedColumns++;
+			if (!Double.isFinite(theta.getDouble(pivotRowIndex, 0))) {
+				this.close(theta);
+				continue;
+			}
+			this.close(theta);
+			pivots++;
+			temp = A.getRow(pivotRowIndex).dup();
+			A.putRow(pivotRowIndex, A.getRow(rowNumber - pivots));
+			A.putRow(rowNumber - pivots, temp);
+			this.close(temp);
+			B[pivotRowIndex] = B[rowNumber - pivots];
+			B[rowNumber - pivots] = pivotColumnIndex;
+			temp = x.getRow(pivotRowIndex).dup();
+			x.putRow(pivotRowIndex, x.getRow(rowNumber - pivots));
+			x.putRow(rowNumber - pivots, temp);
+			this.close(temp);
+		}
+		return 0;
 	}
 	
 	/**
@@ -426,7 +505,7 @@ public class SimplexSolverDouble {
 	 * @param b
 	 * @return
 	 */
-	public int GaussianTransformation(List<Integer> pivotList,@Nonnull INDArray A, INDArray b) {
+	private int GaussianTransformation(List<Integer> pivotList,@Nonnull INDArray A, INDArray b) {
 		int rowNumber = A.rows();
 		int columnNumber = A.columns();
 		INDArray A1 = A, b1;
@@ -495,11 +574,19 @@ public class SimplexSolverDouble {
 			A1.subi(minuent);
 			coefficient.muli(b1.getScalar(tempPosition, 0));
 			b1.subi(coefficient);
-			this.close(minuent); this.close(coefficient);					
+			this.close(minuent); this.close(coefficient);
 		}
 		if (b == null) {
 			this.close(b1);
 		}
 		return returnValue;
+	}
+	
+	private double[] returnVertex(int length, int[] B, INDArray x) {
+		double[] result = new double[length];
+		for (int i = 0; i < B.length; i++) {
+			result[B[i]] = x.getDouble(i);
+		}
+		return result;
 	}
 }

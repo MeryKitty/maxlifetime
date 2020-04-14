@@ -9,7 +9,7 @@ package kitty.research.maxlifetime.algorithm;
  */
 public class Edge {
 	private final Vertex start, end;
-	private double capacity;
+	private int capacity;
 	
 	/**
 	 * Construct an edge with given start and end edges
@@ -46,11 +46,11 @@ public class Edge {
 	 * 
 	 * @return
 	 */
-	public double capacity() {
+	public int capacity() {
 		return this.capacity;
 	}
 	
-	void setCapacity(double capacity) {
+	void setCapacity(int capacity) {
 		this.capacity = capacity;
 	}
 }

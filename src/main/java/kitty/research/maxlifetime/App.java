@@ -69,10 +69,10 @@ public class App {
 				var spl = new SimplexSolverDouble();
 				var resultVertex = spl.execute(A, b, c);
 				A.close(); b.close(); c.close();
-				double result = -resultVertex.first();
-				System.out.println("        Real Result: " + result);
+				double realResult = -resultVertex.first();
+				System.out.println("        Real Result: " + realResult);
 				double[] vertex = resultVertex.second();
-				result = graph.analyseIntFlow(vertex);
+				int result = graph.analyseIntFlow(vertex);
 				long end = System.currentTimeMillis();
 				System.out.println("        Time: " + (end - mid2) + "\n        Result: " + result);
 				Files.write(Paths.get(outputFile + value + ".txt"), (field + ": " + result + " " + (end - start) + "\n").getBytes(), StandardOpenOption.APPEND);

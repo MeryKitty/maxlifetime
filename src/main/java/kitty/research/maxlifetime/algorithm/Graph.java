@@ -225,7 +225,7 @@ public class Graph {
 	public int analyseIntFlow(double[] vertex) {
 		// initialise the flow network
 		for (int i = 0; i < this.edgeList.size(); i++) {
-			this.edgeList.get(i).setCapacity(vertex[i]);
+			this.edgeList.get(i).setCapacity((int) (vertex[i] + 1E-9));
 		}
 		//
 		int intFlow = 0;
@@ -251,7 +251,7 @@ public class Graph {
 				var temp = new HashSet<Vertex>();
 				for (var ver : current) {
 					for (var exam : ver.in().entrySet()) {
-						if (exam.getValue().capacity() >= 1 - 1E-9 && !passed.contains(exam.getKey())) {
+						if (exam.getValue().capacity() > 0 && !passed.contains(exam.getKey())) {
 							if (temp.add(exam.getKey())) {
 								next.put(exam.getKey(), ver);
 								if (exam.getKey().equals(this.startVer)) {
@@ -281,8 +281,8 @@ public class Graph {
 		int flow = Integer.MAX_VALUE;
 		for (int i = 0; i < path.size() - 1; i++) {
 			var tempEdge = path.get(i).out().get(path.get(i + 1));
-			if (tempEdge.capacity() < flow - 1E-9) {
-				flow = (int) (tempEdge.capacity() + 1E-9);
+			if (tempEdge.capacity() < flow) {
+				flow = tempEdge.capacity();
 			}
 		}
 		for (int i = 0; i < path.size() - 1; i++) {

@@ -15,7 +15,7 @@ public class DataGenerator {
 	private static final double W = 300, H = 150;
 	private static final double E_alpha = 60, d_alpha = 10;
 	private static final double E_r = 30, d_r = 5;
-	private static final double E_lt = 2, d_lt = 0.5;
+//	private static final double E_lt = 2, d_lt = 0.5;
 	private static final int DIRECTIONS = 6;
 	private static final int SENSOR_NUMBER = 100;
 	private static final String outputFile = "./data/input/lifetime/";

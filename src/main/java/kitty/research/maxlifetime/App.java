@@ -70,12 +70,13 @@ public class App {
 				var resultVertex = spl.execute(A, b, c);
 				A.close(); b.close(); c.close();
 				double realResult = -resultVertex.first();
+				long end = System.currentTimeMillis();
 				System.out.println("        Real Result: " + realResult);
 				double[] vertex = resultVertex.second();
 				int result = graph.analyseIntFlow(vertex);
-				long end = System.currentTimeMillis();
+				long post = System.currentTimeMillis();
 				System.out.println("        Time: " + (end - mid2) + "\n        Result: " + result);
-				Files.write(Paths.get(outputFile + value + ".txt"), (field + ": " + result + " " + (end - start) + "\n").getBytes(), StandardOpenOption.APPEND);
+				Files.write(Paths.get(outputFile + value + ".txt"), (field + ": " + realResult + " " + result + " " + (end - start) + " " + (mid2 - start) + " " + (mid3 - mid2) + " " + (end - mid3) + " " + (post - end) + "\n").getBytes(), StandardOpenOption.APPEND);
 //				results[field] = result;
 			}
 //			long overallEnd = System.currentTimeMillis();

@@ -225,7 +225,9 @@ public class Graph {
 	public int analyseIntFlow(double[] vertex) {
 		// initialise the flow network
 		for (int i = 0; i < this.edgeList.size(); i++) {
-			this.edgeList.get(i).setCapacity((int) (vertex[i] + 1E-9));
+			if (vertex[i] > 0) {
+				this.edgeList.get(i).setCapacity((int) (vertex[i] + 1E-4));
+			}
 		}
 		//
 		int intFlow = 0;
